@@ -298,6 +298,12 @@ tr.anulado td.tachar { text-decoration: line-through; }
   .tabs { order: 3; width: 100%; margin-left: 0; }
 }
 th.num, td.num { text-align: right; }
+.tipo-chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; background: var(--c-azul-suave); color: var(--c-azul); white-space: nowrap; }
+.tipo-chip.pre { background: var(--c-naranjo); color: #fff; }
+.tipo-chip.vacio { background: transparent; color: var(--muted); }
+.pantallazo-caja { display: flex; flex-direction: column; gap: 8px; }
+.pantallazo-caja img { max-width: 100%; max-height: 520px; object-fit: contain; border-radius: 12px; border: 1px solid var(--line); background: var(--field); align-self: flex-start; }
+.obs-txt { background: var(--field); border-radius: 10px; padding: 8px 10px; font-weight: 500; }
 .tj-km { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tj-km b { color: var(--fg); }
 select:disabled { opacity: 1; cursor: default; }
@@ -427,6 +433,7 @@ select:disabled { opacity: 1; cursor: default; }
         <div class="f"><label for="f-equipo">Equipo</label><input id="f-equipo" inputmode="numeric" placeholder="Ej: 4387" style="width:110px"></div>
         <div class="f grow"><label for="f-destino">Destino</label><input id="f-destino" placeholder="Buscar destino"></div>
         <div class="f"><label for="f-estado">Estado</label><select id="f-estado"><option value="">Todos</option><option>Activo</option><option>Anulado</option></select></div>
+        <div class="f"><label for="f-tipo">Tipo de entrega</label><select id="f-tipo"><option value="">Todos</option><option>Estándar</option><option>Pre programa</option><option value="(sin tipo)">Sin tipo</option></select></div>
         <button class="limpiar" type="button" id="limpiar">Limpiar filtros</button>
         <button class="mas-filtros" type="button" id="mas-filtros" aria-expanded="false">Más filtros ▾</button>
       </div>
@@ -440,7 +447,7 @@ select:disabled { opacity: 1; cursor: default; }
         </div>
         <div class="tabla-scroll">
           <table>
-            <thead><tr><th>Fecha y hora</th><th>Conductor</th><th>RUT</th><th>Equipo</th><th>Base</th><th>Documento</th><th>Destino</th><th>Tracto</th><th class="num">Km</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha y hora</th><th>Conductor</th><th>RUT</th><th>Equipo</th><th>Base</th><th>Documento</th><th>Destino</th><th>Tracto</th><th class="num">Km</th><th>Tipo de entrega</th><th>Estado</th></tr></thead>
             <tbody id="filas"></tbody>
           </table>
         </div>
@@ -552,6 +559,9 @@ const iso = f => `${f.getFullYear()}-${dosDig(f.getMonth() + 1)}-${dosDig(f.getD
 const fechaHora = s => { const [d, h] = String(s).split("T"); return d.split("-").reverse().join("-") + (h ? " " + h : ""); };
 const ahoraIso = () => { const f = new Date(); return `${iso(f)}T${dosDig(f.getHours())}:${dosDig(f.getMinutes())}`; };
 const miles = n => Math.round(Number(n) || 0).toLocaleString("es-CL");
+// Etiqueta del tipo de entrega; el pre programa destaca y avisa si trae observación
+const tipoChip = v => !v.tipo ? `<span class="tipo-chip vacio">—</span>`
+  : v.tipo === "Pre programa" ? `<span class="tipo-chip pre">Pre programa${v.observacion ? " · obs." : ""}</span>` : `<span class="tipo-chip">${esc(v.tipo)}</span>`;
 function toast(t) {
   document.querySelectorAll(".toast").forEach(e => e.remove());
   const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d);
@@ -564,7 +574,7 @@ const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
 const puede = { corregir: () => sesion && sesion.rol !== "Lector", anular: () => sesion && sesion.rol === "Administrador" };
 
 // ---------- Filtros ----------
-const F = { desde: iso(hoy), hasta: iso(hoy), base: "", conductor: "", equipo: "", destino: "", estado: "" };
+const F = { desde: iso(hoy), hasta: iso(hoy), base: "", conductor: "", equipo: "", destino: "", estado: "", tipo: "" };
 $("desde").value = F.desde; $("hasta").value = F.hasta;
 
 function rango(r) {
@@ -583,11 +593,11 @@ $("rapidos").addEventListener("click", e => { const b = e.target.closest("button
   if (F.desde && F.hasta && F.desde > F.hasta) { toast("La fecha Desde no puede ser posterior a Hasta."); return; }
   marcarRapido(""); cargarViajes();
 }));
-[["f-base", "base"], ["f-conductor", "conductor"], ["f-equipo", "equipo"], ["f-destino", "destino"], ["f-estado", "estado"]].forEach(([id, k]) =>
+[["f-base", "base"], ["f-conductor", "conductor"], ["f-equipo", "equipo"], ["f-destino", "destino"], ["f-estado", "estado"], ["f-tipo", "tipo"]].forEach(([id, k]) =>
   $(id).addEventListener("input", () => { F[k] = $(id).value.trim(); if (k === "base") $("nav-base").value = F.base; pintar(); }));
 $("limpiar").addEventListener("click", () => {
-  ["f-base", "f-conductor", "f-equipo", "f-destino", "f-estado"].forEach(id => $(id).value = "");
-  Object.assign(F, { base: "", conductor: "", equipo: "", destino: "", estado: "" });
+  ["f-base", "f-conductor", "f-equipo", "f-destino", "f-estado", "f-tipo"].forEach(id => $(id).value = "");
+  Object.assign(F, { base: "", conductor: "", equipo: "", destino: "", estado: "", tipo: "" });
   $("nav-base").value = "";
   if (baseFija()) elegirBase(baseFija());
   rango("hoy");
@@ -602,7 +612,8 @@ function filtrados(excluir) {
       && (excluir === "conductor" || !F.conductor || v.nombre === F.conductor)
       && (excluir === "equipo" || !F.equipo || String(v.equipo).startsWith(F.equipo))
       && (excluir === "destino" || !F.destino || norm(v.destino).includes(norm(F.destino)))
-      && (excluir === "estado" || !F.estado || v.estado === F.estado);
+      && (excluir === "estado" || !F.estado || v.estado === F.estado)
+      && (excluir === "tipo" || !F.tipo || (v.tipo || "(sin tipo)") === F.tipo);
   });
 }
 
@@ -685,7 +696,7 @@ function pintar() {
   $("conteo").textContent = cargando ? "Cargando…" : `${lista.length} viaje${lista.length === 1 ? "" : "s"}`;
 
   // Al filtrar se oculta el resumen: solo queda lo que se busca, con los filtros a la vista para quitarlos
-  const NOMBRES = { base: "Base", conductor: "Conductor", equipo: "Equipo", destino: "Destino", estado: "Estado" };
+  const NOMBRES = { base: "Base", conductor: "Conductor", equipo: "Equipo", destino: "Destino", estado: "Estado", tipo: "Tipo de entrega" };
   const activosF = Object.keys(NOMBRES).filter(k => F[k] && !(k === "base" && baseFija()));
   $("resumen").hidden = activosF.length > 0;
   $("activos").innerHTML = activosF.map(k =>
@@ -693,14 +704,14 @@ function pintar() {
     + (activosF.length > 1 ? `<button type="button" class="quitar-todo" data-quitar="todo">Quitar todos</button>` : "");
 
   $("filas").innerHTML = cargando && !VIAJES.length
-    ? `<tr><td colspan="10" class="vacio-tabla">Cargando viajes desde la planilla…</td></tr>`
+    ? `<tr><td colspan="11" class="vacio-tabla">Cargando viajes desde la planilla…</td></tr>`
     : lista.length ? lista.map(v => `
     <tr data-id="${esc(v.id)}" tabindex="0" class="${v.estado === "Anulado" ? "anulado" : ""} ${seleccionado === v.id ? "sel" : ""}">
       <td>${fechaHora(v.fecha)}</td><td class="tachar">${esc(v.nombre)}</td><td>${esc(v.rut)}</td><td><b>${esc(v.equipo)}</b></td><td>${esc(v.base || "—")}</td>
       <td class="tachar">${esc(v.documento)}</td><td class="tachar">${esc(v.destino)}</td>
-      <td>${esc(v.tracto || "—")}</td><td class="num">${v.km ? miles(v.km) : "—"}</td>
+      <td>${esc(v.tracto || "—")}</td><td class="num">${v.km ? miles(v.km) : "—"}</td><td>${tipoChip(v)}</td>
       <td><span class="estado ${esc(v.estado)}">${esc(v.estado)}</span></td>
-    </tr>`).join("") : `<tr><td colspan="10" class="vacio-tabla">No hay viajes con estos filtros. Prueba con otro período o toca "Limpiar filtros".</td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="11" class="vacio-tabla">No hay viajes con estos filtros. Prueba con otro período o toca "Limpiar filtros".</td></tr>`;
 }
 $("filas").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) abrir(tr.dataset.id); });
 $("filas").addEventListener("keydown", e => { if (e.key === "Enter") { const tr = e.target.closest("tr[data-id]"); if (tr) abrir(tr.dataset.id); } });
@@ -714,7 +725,7 @@ function pintarTarjetas() {
       <button type="button" class="tarjeta ${v.estado === "Anulado" ? "anulado" : ""}" data-id="${esc(v.id)}">
         <span class="tj-cab"><span class="tj-eq">${esc(v.equipo)}</span><span class="tj-base">${esc(v.base || "Sin base")}</span><span class="tj-hora">${fechaHora(v.fecha).slice(F.desde === F.hasta ? 11 : 0)}</span></span>
         <span class="tj-dest">${esc(v.destino)}</span>
-        <span class="tj-det">${esc(v.nombre)} · Doc. ${esc(v.documento)}</span>
+        <span class="tj-det">${esc(v.nombre)} · Doc. ${esc(v.documento)}${v.tipo ? " · " + tipoChip(v) : ""}</span>
         <span class="tj-pie"><span class="tj-km">Tracto <b>${esc(v.tracto || "—")}</b> · ${v.km ? miles(v.km) + " km" : "sin km"}</span><span class="estado ${esc(v.estado)}">${esc(v.estado)}</span></span>
       </button>`).join("")
     : `<div class="vacio-tabla">No hay viajes${F.equipo ? " del equipo " + esc(F.equipo) : ""} en este período. Prueba con "7 días".</div>`;
@@ -771,7 +782,7 @@ addEventListener("appinstalled", () => { avisoInstalar = null; $("instalar-panel
 }));
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
-const CAMPO_FILTRO = { base: "f-base", conductor: "f-conductor", equipo: "f-equipo", destino: "f-destino", estado: "f-estado" };
+const CAMPO_FILTRO = { base: "f-base", conductor: "f-conductor", equipo: "f-equipo", destino: "f-destino", estado: "f-estado", tipo: "f-tipo" };
 $("activos").addEventListener("click", e => {
   const b = e.target.closest("[data-quitar]"); if (!b) return;
   const claves = b.dataset.quitar === "todo" ? Object.keys(CAMPO_FILTRO) : [b.dataset.quitar];
@@ -793,11 +804,11 @@ $("excel").addEventListener("click", () => {
   const lista = filtrados();
   if (!lista.length) { toast("No hay viajes para descargar con estos filtros."); return; }
   if (!window.XLSX) { toast("No se pudo preparar el Excel. Revisa tu conexión y recarga la página."); return; }
-  const filas = [["Fecha y hora", "RUT", "Conductor", "Equipo", "Base", "Tracto", "Km", "Documento", "Destino", "Estado", "ID"]];
+  const filas = [["Fecha y hora", "RUT", "Conductor", "Equipo", "Base", "Tracto", "Km", "Documento", "Destino", "Tipo de entrega", "Observación", "Pantallazo", "Estado", "ID"]];
   lista.forEach(v => filas.push([fechaHora(v.fecha), v.rut, v.nombre, Number(v.equipo) || v.equipo, v.base,
-    Number(v.tracto) || v.tracto, v.km || "", v.documento, v.destino, v.estado, v.id]));
+    Number(v.tracto) || v.tracto, v.km || "", v.documento, v.destino, v.tipo || "", v.observacion || "", v.pantallazo ? "Sí" : "", v.estado, v.id]));
   const hoja = XLSX.utils.aoa_to_sheet(filas);
-  hoja["!cols"] = [17, 13, 24, 8, 14, 8, 10, 13, 26, 10, 10].map(w => ({ wch: w }));
+  hoja["!cols"] = [17, 13, 24, 8, 14, 8, 10, 13, 26, 14, 34, 11, 10, 10].map(w => ({ wch: w }));
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, "Viajes");
   const nombre = F.desde === F.hasta ? `viajes_${F.desde}.xlsx` : `viajes_${F.desde}_a_${F.hasta}.xlsx`;
@@ -807,6 +818,7 @@ $("excel").addEventListener("click", () => {
 
 // ---------- Detalle ----------
 let editando = false, confirmando = false, guardando = false;
+const PANTALLAZOS = {};   // imágenes ya traídas de la planilla, por id de viaje
 function abrir(id) { seleccionado = id; editando = false; confirmando = false; pintar(); pintarLateral(); }
 function cerrar() { seleccionado = null; document.querySelectorAll(".velo, .lateral").forEach(e => e.remove()); pintar(); }
 function pintarLateral() {
@@ -829,7 +841,12 @@ function pintarLateral() {
         <dt>Destino</dt><dd>${editando ? `<select id="e-dest">${listaDestinos.map(d => `<option ${d === v.destino ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>` : esc(v.destino)}</dd>
         <dt>Tracto</dt><dd>${editando ? `<input id="e-tracto" inputmode="numeric" maxlength="4" value="${esc(v.tracto)}">` : esc(v.tracto || "—")}</dd>
         <dt>Km del tablero</dt><dd>${editando ? `<input id="e-km" inputmode="numeric" maxlength="7" value="${v.km || ""}">` : (v.km ? miles(v.km) + " km" : "—")}</dd>
+        <dt>Tipo de entrega</dt><dd>${tipoChip(v)}</dd>
+        ${v.observacion ? `<dt>Observación</dt><dd><div class="obs-txt">${esc(v.observacion)}</div></dd>` : ""}
       </dl>
+      ${v.pantallazo ? `<div class="pantallazo-caja"><b>Pantallazo del pre programa</b>${PANTALLAZOS[v.id]
+        ? `<img src="${PANTALLAZOS[v.id]}" alt="Pantallazo del pre programa del viaje ${esc(v.id)}">`
+        : `<button class="btn sec" type="button" id="ver-pantallazo">Ver pantallazo</button>`}</div>` : ""}
       ${editando ? `<p class="permiso">Al corregir el km o el tracto no se revisa la continuidad: verifica bien el número del tablero.</p>` : ""}
       ${confirmando ? `<div class="confirmar"><b>¿Anular este viaje?</b>Quedará marcado como Anulado en la planilla; no se borra. Puedes reactivarlo después.<div><button class="btn peligro" type="button" id="si-anular">Sí, anular</button><button class="btn sec" type="button" id="no-anular">Cancelar</button></div></div>` : ""}
       ${sesion.rol === "Lector" ? `<div class="permiso">Tu rol es <b>Lector</b>: puedes ver y descargar, pero no corregir ni anular.</div>` : ""}
@@ -855,6 +872,11 @@ function pintarLateral() {
     finally { guardando = false; }
   }
   on("cerrar-lat", cerrar);
+  on("ver-pantallazo", () => accion({ accion: "pantallazo", id: v.id }, "ver-pantallazo", "Cargando…", r => {
+    if (!/^data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+$/.test(r.imagen || "")) { toast("No se pudo mostrar el pantallazo."); pintarLateral(); return; }
+    PANTALLAZOS[v.id] = r.imagen;
+    pintarLateral();
+  }));
   on("corregir", () => { editando = true; pintarLateral(); });
   on("cancelar", () => { editando = false; pintarLateral(); });
   on("anular", () => { confirmando = true; pintarLateral(); });

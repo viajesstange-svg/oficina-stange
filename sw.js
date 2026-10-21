@@ -1,6 +1,6 @@
 // Panel de oficina: siempre busca la versión más nueva; solo si no hay internet muestra la última guardada.
 // Los datos de la planilla nunca se guardan aquí (pasan directo a Google).
-const VERSION = "viajes-oficina-v2";
+const VERSION = "viajes-oficina-v3";
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(["./", "./manifest.webmanifest", "./icono-192.png", "./icono-512.png"])));
