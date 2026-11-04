@@ -1067,7 +1067,7 @@ $("salir").addEventListener("click", () => {
 
 // ---------- Modo pizarra ----------
 // La pantalla queda con una sesión propia de 30 días que solo sirve para ver la pizarra.
-// La sesión normal del panel se cierra, así nadie puede corregir ni anular desde la TV.
+// Mientras está en pizarra no se puede corregir ni anular; al salir se vuelve al panel con el mismo usuario.
 const pz = { token: null, vistos: new Set(), primera: true, timer: null, reloj: null, wake: null };
 async function apiPizarra(datos) {
   const r = await fetch(API, { method: "POST", body: JSON.stringify(Object.assign({}, datos, { token: pz.token })) });
@@ -1143,13 +1143,23 @@ $("pz-completa").addEventListener("click", () => {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   else if (el.requestFullscreen) el.requestFullscreen().catch(() => toast("Esta pantalla no permite pantalla completa."));
 });
-function salirPizarra(mensaje) {
-  if (pz.token && !mensaje) apiPizarra({ accion: "salir" }).catch(() => {});
+// Al tocar "Salir de la pizarra" se vuelve al panel con el mismo usuario (la planilla cambia la sesión
+// de pizarra por una normal). Si la pizarra venció o no hay conexión, se pide ingresar de nuevo.
+async function salirPizarra(mensaje) {
+  let normal = null;
+  if (pz.token && !mensaje) {
+    const b = $("pz-salir"); b.disabled = true;
+    try { const r = await apiPizarra({ accion: "volverAlPanel" }); if (r.ok && r.token) normal = r; }
+    catch (e) {}
+    finally { b.disabled = false; }
+    if (!normal) apiPizarra({ accion: "salir" }).catch(() => {});
+  }
   clearInterval(pz.timer); clearInterval(pz.reloj);
   try { if (pz.wake) pz.wake.release(); } catch (e) {}
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   pz.token = null; guardar("pizarra-viajes-stange", null);
-  $("pizarra").hidden = true; document.querySelector("main").hidden = false;
+  $("pizarra").hidden = true; document.querySelector("main").hidden = false; document.querySelector(".top").hidden = false;
+  if (normal) { iniciar(normal); return; }
   cerrarSesion(mensaje || "");
   $("l-usuario").focus();
 }
