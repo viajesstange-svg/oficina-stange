@@ -340,7 +340,11 @@ select:disabled { opacity: 1; cursor: default; }
 .pz-cont b.sube { animation: pz-sube .7s cubic-bezier(.3,1.6,.5,1); }
 @keyframes pz-sube { 0% { transform: scale(1.35); color: #fff; } 100% { transform: none; } }
 .pz-cont span { font-size: clamp(10px, .9vw, 13px); letter-spacing: .18em; color: var(--pz-apagado); text-transform: uppercase; font-weight: 600; }
-.pz-tit, .pz-v { display: grid; grid-template-columns: 4.6em 5.4em minmax(0, 1fr) minmax(0, 1.3fr); gap: 0 14px; align-items: center; }
+.pz-tit, .pz-v { display: grid; grid-template-columns: 4.6em 5.4em minmax(0, 1fr) minmax(0, 1.3fr) 9.5em; gap: 0 14px; align-items: center; }
+/* Tipo de entrega: Estándar, o Pre programa con su ventana de entrega (leída del pantallazo) */
+.pz-v .t { justify-self: start; font-family: var(--font-display); font-weight: 700; font-size: .78em; line-height: 1.15; padding: 3px 9px; border-radius: 8px; border: 1px solid var(--pz-linea); color: var(--pz-apagado); white-space: nowrap; }
+.pz-v .t.pre { color: #fff; background: color-mix(in srgb, var(--pz-naranjo) 30%, transparent); border-color: var(--pz-naranjo); }
+.pz-v .t b { display: block; font-size: 1.15em; font-variant-numeric: tabular-nums; }
 .pz-tit { font-size: clamp(10px, .85vw, 13px); letter-spacing: .18em; text-transform: uppercase; color: var(--pz-apagado); font-weight: 600; padding: 0 14px; }
 .pz-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 85%, transparent); mask-image: linear-gradient(to bottom, #000 85%, transparent); }
 .pz-v { padding: clamp(8px, 1.1vh, 14px) 14px; border-radius: 12px; background: color-mix(in srgb, var(--pz-fondo) 55%, transparent); border: 1px solid var(--pz-linea); font-size: clamp(14px, 1.35vw, 22px); position: relative; overflow: hidden; }
@@ -355,7 +359,8 @@ select:disabled { opacity: 1; cursor: default; }
 @keyframes pz-destello { to { transform: translateX(100%); } }
 .pz-vacia { color: var(--pz-apagado); text-align: center; padding: 40px 10px; border: 1px dashed var(--pz-linea); border-radius: 12px; }
 .pz-bases.angosto .pz-tit { display: none; }
-.pz-bases.angosto .pz-v { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "h d" "e c"; gap: 4px 12px; }
+.pz-bases.angosto .pz-v { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "h d" "e c" ". t"; gap: 4px 12px; }
+.pz-bases.angosto .pz-v .t { grid-area: t; }
 .pz-bases.angosto .pz-v .h { grid-area: h; } .pz-bases.angosto .pz-v .e { grid-area: e; font-size: .85em; }
 .pz-bases.angosto .pz-v .d { grid-area: d; } .pz-bases.angosto .pz-v .c { grid-area: c; font-size: .9em; }
 .pz-pie { display: flex; align-items: center; gap: 10px; color: var(--pz-apagado); font-size: 13px; flex-wrap: wrap; }
@@ -1114,6 +1119,8 @@ async function cargarPizarra() {
     $("pz-estado").textContent = "Sin conexión con la planilla. Se reintenta solo cada 30 segundos.";
   }
 }
+// Estándar, o Pre programa con la ventana de entrega si ya se leyó del pantallazo (viajes antiguos sin tipo: vacío)
+const tipoPizarra = v => v.tipo === "Pre programa" ? `<span class="t pre">Pre programa${v.ventana ? `<b>${esc(v.ventana)}</b>` : ""}</span>` : v.tipo ? `<span class="t">${esc(v.tipo)}</span>` : "<span></span>";
 function pintarPizarra(r) {
   const bases = r.bases || [];
   $("pz-titulo").textContent = bases.length === 1 ? "Viajes de hoy · Base " + bases[0] : bases.length > 1 ? `Viajes de hoy · ${bases.length} flotas` : "Viajes de hoy";
@@ -1129,8 +1136,8 @@ function pintarPizarra(r) {
     const subio = vs.some(v => nuevos.has(v.id));
     return `<section class="pz-base">
       <div class="pz-base-cab"><h2><small>BASE</small>${esc(base)}</h2><div class="pz-cont"><b class="${subio ? "sube" : ""}">${vs.length}</b><span>viajes hoy</span></div></div>
-      <div class="pz-tit"><span>Hora</span><span>Equipo</span><span>Conductor</span><span>Destino</span></div>
-      <ol class="pz-lista">${vs.length ? vs.map(v => `<li class="pz-v${nuevos.has(v.id) ? " nuevo" : ""}"><span class="h">${esc(v.hora)}</span><span class="e">${esc(v.equipo)}</span><span class="c">${esc(v.conductor)}</span><span class="d">${esc(v.destino)}</span></li>`).join("") : `<li class="pz-vacia">Todavía no hay viajes hoy.</li>`}</ol>
+      <div class="pz-tit"><span>Hora</span><span>Equipo</span><span>Conductor</span><span>Destino</span><span>Entrega</span></div>
+      <ol class="pz-lista">${vs.length ? vs.map(v => `<li class="pz-v${nuevos.has(v.id) ? " nuevo" : ""}"><span class="h">${esc(v.hora)}</span><span class="e">${esc(v.equipo)}</span><span class="c">${esc(v.conductor)}</span><span class="d">${esc(v.destino)}</span>${tipoPizarra(v)}</li>`).join("") : `<li class="pz-vacia">Todavía no hay viajes hoy.</li>`}</ol>
     </section>`;
   }).join("");
 }
