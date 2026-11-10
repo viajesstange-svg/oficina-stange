@@ -51,7 +51,7 @@ button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible, tr:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
 .gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-.wrap { max-width: 1240px; margin: 0 auto; }
+.wrap { max-width: 1480px; margin: 0 auto; }
 
 /* Aviso de demo */
 .demo-bar { background: var(--warn-soft); color: var(--warn); font-size: 13.5px; font-weight: 500; padding-block: 8px; }
@@ -301,6 +301,8 @@ th.num, td.num { text-align: right; }
 .tipo-chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; background: var(--c-azul-suave); color: var(--c-azul); white-space: nowrap; }
 .tipo-chip.pre { background: var(--c-naranjo); color: #fff; }
 .tipo-chip.vacio { background: transparent; color: var(--muted); }
+.obs-celda { min-width: 240px; max-width: 380px; white-space: normal; line-height: 1.3; font-size: 14px; font-weight: 600; color: var(--c-naranjo); }
+.obs-celda.vacia { color: var(--muted); font-weight: 400; }
 .pantallazo-caja { display: flex; flex-direction: column; gap: 8px; }
 .pantallazo-caja img { max-width: 100%; max-height: 520px; object-fit: contain; border-radius: 12px; border: 1px solid var(--line); background: var(--field); align-self: flex-start; }
 .obs-txt { background: var(--field); border-radius: 10px; padding: 8px 10px; font-weight: 500; }
@@ -452,7 +454,7 @@ select:disabled { opacity: 1; cursor: default; }
         </div>
         <div class="tabla-scroll">
           <table>
-            <thead><tr><th>Fecha y hora</th><th>Conductor</th><th>RUT</th><th>Equipo</th><th>Base</th><th>Documento</th><th>Destino</th><th>Tracto</th><th class="num">Km</th><th>Tipo de entrega</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha y hora</th><th>Conductor</th><th>RUT</th><th>Equipo</th><th>Base</th><th>Documento</th><th>Destino</th><th>Tracto</th><th class="num">Km</th><th>Tipo de entrega</th><th>Observación</th><th>Estado</th></tr></thead>
             <tbody id="filas"></tbody>
           </table>
         </div>
@@ -564,9 +566,11 @@ const iso = f => `${f.getFullYear()}-${dosDig(f.getMonth() + 1)}-${dosDig(f.getD
 const fechaHora = s => { const [d, h] = String(s).split("T"); return d.split("-").reverse().join("-") + (h ? " " + h : ""); };
 const ahoraIso = () => { const f = new Date(); return `${iso(f)}T${dosDig(f.getHours())}:${dosDig(f.getMinutes())}`; };
 const miles = n => Math.round(Number(n) || 0).toLocaleString("es-CL");
-// Etiqueta del tipo de entrega; el pre programa destaca y avisa si trae observación
-const tipoChip = v => !v.tipo ? `<span class="tipo-chip vacio">—</span>`
-  : v.tipo === "Pre programa" ? `<span class="tipo-chip pre">Pre programa${v.observacion ? " · obs." : ""}</span>` : `<span class="tipo-chip">${esc(v.tipo)}</span>`;
+// Etiqueta del tipo de entrega; el pre programa destaca. Con conObs (tarjetas del celular, igual que antes) avisa si el pre programa trae observación
+const tipoChip = (v, conObs) => !v.tipo ? `<span class="tipo-chip vacio">—</span>`
+  : v.tipo === "Pre programa" ? `<span class="tipo-chip pre">Pre programa${conObs && v.observacion ? " · obs." : ""}</span>` : `<span class="tipo-chip">${esc(v.tipo)}</span>`;
+// Celda de observación de la tabla (panel web): el texto completo
+const obsCelda = v => v.observacion ? `<td class="obs-celda" title="${esc(v.observacion)}">${esc(v.observacion)}</td>` : `<td class="obs-celda vacia">—</td>`;
 function toast(t) {
   document.querySelectorAll(".toast").forEach(e => e.remove());
   const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d);
@@ -709,14 +713,14 @@ function pintar() {
     + (activosF.length > 1 ? `<button type="button" class="quitar-todo" data-quitar="todo">Quitar todos</button>` : "");
 
   $("filas").innerHTML = cargando && !VIAJES.length
-    ? `<tr><td colspan="11" class="vacio-tabla">Cargando viajes desde la planilla…</td></tr>`
+    ? `<tr><td colspan="12" class="vacio-tabla">Cargando viajes desde la planilla…</td></tr>`
     : lista.length ? lista.map(v => `
     <tr data-id="${esc(v.id)}" tabindex="0" class="${v.estado === "Anulado" ? "anulado" : ""} ${seleccionado === v.id ? "sel" : ""}">
       <td>${fechaHora(v.fecha)}</td><td class="tachar">${esc(v.nombre)}</td><td>${esc(v.rut)}</td><td><b>${esc(v.equipo)}</b></td><td>${esc(v.base || "—")}</td>
       <td class="tachar">${esc(v.documento)}</td><td class="tachar">${esc(v.destino)}</td>
-      <td>${esc(v.tracto || "—")}</td><td class="num">${v.km ? miles(v.km) : "—"}</td><td>${tipoChip(v)}</td>
+      <td>${esc(v.tracto || "—")}</td><td class="num">${v.km ? miles(v.km) : "—"}</td><td>${tipoChip(v)}</td>${obsCelda(v)}
       <td><span class="estado ${esc(v.estado)}">${esc(v.estado)}</span></td>
-    </tr>`).join("") : `<tr><td colspan="11" class="vacio-tabla">No hay viajes con estos filtros. Prueba con otro período o toca "Limpiar filtros".</td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="12" class="vacio-tabla">No hay viajes con estos filtros. Prueba con otro período o toca "Limpiar filtros".</td></tr>`;
 }
 $("filas").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) abrir(tr.dataset.id); });
 $("filas").addEventListener("keydown", e => { if (e.key === "Enter") { const tr = e.target.closest("tr[data-id]"); if (tr) abrir(tr.dataset.id); } });
@@ -730,7 +734,7 @@ function pintarTarjetas() {
       <button type="button" class="tarjeta ${v.estado === "Anulado" ? "anulado" : ""}" data-id="${esc(v.id)}">
         <span class="tj-cab"><span class="tj-eq">${esc(v.equipo)}</span><span class="tj-base">${esc(v.base || "Sin base")}</span><span class="tj-hora">${fechaHora(v.fecha).slice(F.desde === F.hasta ? 11 : 0)}</span></span>
         <span class="tj-dest">${esc(v.destino)}</span>
-        <span class="tj-det">${esc(v.nombre)} · Doc. ${esc(v.documento)}${v.tipo ? " · " + tipoChip(v) : ""}</span>
+        <span class="tj-det">${esc(v.nombre)} · Doc. ${esc(v.documento)}${v.tipo ? " · " + tipoChip(v, true) : ""}</span>
         <span class="tj-pie"><span class="tj-km">Tracto <b>${esc(v.tracto || "—")}</b> · ${v.km ? miles(v.km) + " km" : "sin km"}</span><span class="estado ${esc(v.estado)}">${esc(v.estado)}</span></span>
       </button>`).join("")
     : `<div class="vacio-tabla">No hay viajes${F.equipo ? " del equipo " + esc(F.equipo) : ""} en este período. Prueba con "7 días".</div>`;
