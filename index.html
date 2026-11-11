@@ -348,7 +348,12 @@ select:disabled { opacity: 1; cursor: default; }
 .pz-v .t.pre { color: #fff; background: color-mix(in srgb, var(--pz-naranjo) 30%, transparent); border-color: var(--pz-naranjo); }
 .pz-v .t b { display: block; font-size: 1.15em; font-variant-numeric: tabular-nums; }
 .pz-tit { font-size: clamp(10px, .85vw, 13px); letter-spacing: .18em; text-transform: uppercase; color: var(--pz-apagado); font-weight: 600; padding: 0 14px; }
-.pz-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 85%, transparent); mask-image: linear-gradient(to bottom, #000 85%, transparent); }
+.pz-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 0 0; scrollbar-width: thin; scrollbar-color: var(--pz-azul) transparent; }
+/* Si hay más viajes de los que caben, se difumina el borde de abajo hasta llegar al final de la lista */
+.pz-lista.mas { -webkit-mask-image: linear-gradient(to bottom, #000 88%, transparent); mask-image: linear-gradient(to bottom, #000 88%, transparent); }
+.pz-lista::-webkit-scrollbar { width: 8px; }
+.pz-lista::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--pz-azul) 70%, transparent); border-radius: 8px; }
+.pz-lista > li { flex-shrink: 0; }
 .pz-v { padding: clamp(8px, 1.1vh, 14px) 14px; border-radius: 12px; background: color-mix(in srgb, var(--pz-fondo) 55%, transparent); border: 1px solid var(--pz-linea); font-size: clamp(14px, 1.35vw, 22px); position: relative; overflow: hidden; }
 .pz-v .h { font-family: var(--font-display); font-weight: 700; font-size: 1.1em; color: var(--pz-naranjo); font-variant-numeric: tabular-nums; }
 .pz-v .e { font-family: var(--font-display); font-weight: 700; justify-self: start; background: color-mix(in srgb, var(--pz-azul) 22%, transparent); border: 1px solid color-mix(in srgb, var(--pz-azul) 60%, transparent); border-radius: 8px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
@@ -1133,6 +1138,9 @@ function pintarPizarra(r) {
   (r.viajes || []).forEach(v => { if (!pz.vistos.has(v.id)) { if (!pz.primera) nuevos.add(v.id); pz.vistos.add(v.id); } });
   pz.primera = false;
   const cont = $("pz-bases");
+  // Recordar hasta dónde bajó cada base, para no devolverla arriba en cada actualización
+  const bajado = {};
+  cont.querySelectorAll(".pz-lista[data-base]").forEach(l => { bajado[l.dataset.base] = l.scrollTop; });
   cont.style.setProperty("--cols", Math.max(bases.length, 1));
   cont.classList.toggle("angosto", bases.length > 1 || innerWidth < 900);
   cont.innerHTML = bases.map(base => {
@@ -1141,9 +1149,14 @@ function pintarPizarra(r) {
     return `<section class="pz-base">
       <div class="pz-base-cab"><h2><small>BASE</small>${esc(base)}</h2><div class="pz-cont"><b class="${subio ? "sube" : ""}">${vs.length}</b><span>viajes hoy</span></div></div>
       <div class="pz-tit"><span>Hora</span><span>Equipo</span><span>Conductor</span><span>Destino</span><span>Entrega</span></div>
-      <ol class="pz-lista">${vs.length ? vs.map(v => `<li class="pz-v${nuevos.has(v.id) ? " nuevo" : ""}"><span class="h">${esc(v.hora)}</span><span class="e">${esc(v.equipo)}</span><span class="c">${esc(v.conductor)}</span><span class="d">${esc(v.destino)}</span>${tipoPizarra(v)}</li>`).join("") : `<li class="pz-vacia">Todavía no hay viajes hoy.</li>`}</ol>
+      <ol class="pz-lista" data-base="${esc(base)}" tabindex="0" aria-label="Viajes de ${esc(base)}">${vs.length ? vs.map(v => `<li class="pz-v${nuevos.has(v.id) ? " nuevo" : ""}"><span class="h">${esc(v.hora)}</span><span class="e">${esc(v.equipo)}</span><span class="c">${esc(v.conductor)}</span><span class="d">${esc(v.destino)}</span>${tipoPizarra(v)}</li>`).join("") : `<li class="pz-vacia">Todavía no hay viajes hoy.</li>`}</ol>
     </section>`;
   }).join("");
+  cont.querySelectorAll(".pz-lista").forEach(l => {
+    l.scrollTop = bajado[l.dataset.base] || 0;
+    const marcar = () => l.classList.toggle("mas", l.scrollTop + l.clientHeight < l.scrollHeight - 4);
+    marcar(); l.addEventListener("scroll", marcar, { passive: true });
+  });
 }
 async function pantallaEncendida() {
   try { if ("wakeLock" in navigator && pz.token && document.visibilityState === "visible") pz.wake = await navigator.wakeLock.request("screen"); } catch (e) {}
